@@ -2,7 +2,7 @@ import { api } from './api';
 import { config } from '../config';
 import { INITIAL_TRANSACTIONS } from '../utils/sampleData';
 
-const STORAGE_KEY = 'spendwise_transactions_v1';
+const STORAGE_KEY = 'spendwise_transactions_v2';
 
 /**
  * Helper to get local storage transactions
