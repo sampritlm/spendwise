@@ -1,14 +1,3 @@
-"""
-SpendWise — AWS Serverless Lambda Handlers (Python 3.12)
-Amazon Web Services (AWS) Function-as-a-Service (FaaS) Implementation
-
-Demonstrates:
-- AWS Lambda (Python 3.12 runtime)
-- Amazon DynamoDB (boto3 resource & Decimal handling)
-- Amazon API Gateway HTTP API (Payload format 2.0 & CORS)
-- Amazon CloudWatch Logging & structured telemetry
-"""
-
 import json
 import os
 import logging
@@ -17,16 +6,13 @@ from datetime import datetime
 import boto3
 from boto3.dynamodb.conditions import Key, Attr
 
-# Configure CloudWatch logger
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-# Initialize DynamoDB resource
 DYNAMODB_TABLE_NAME = os.environ.get("DYNAMODB_TABLE", "SpendWiseTransactions")
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(DYNAMODB_TABLE_NAME)
 
-# Helper class to encode Decimal objects to float/int for JSON serialization
 class DecimalEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, Decimal):
@@ -36,7 +22,6 @@ class DecimalEncoder(json.JSONEncoder):
         return super(DecimalEncoder, self).default(obj)
 
 def create_response(status_code, body):
-    """Generates standard HTTP API Gateway response with CORS headers."""
     return {
         "statusCode": status_code,
         "headers": {
@@ -48,17 +33,9 @@ def create_response(status_code, body):
         "body": json.dumps(body, cls=DecimalEncoder),
     }
 
-# ----------------------------------------------------------------------
-# Unified Entrypoint for HTTP API Gateway Router
-# ----------------------------------------------------------------------
 def lambda_handler(event, context):
-    """
-    Unified router that dispatches incoming API Gateway requests to the 
-    corresponding specific Lambda micro-handler.
-    """
     logger.info("Lambda handler received event: %s", json.dumps(event))
     
-    # Handle CORS Preflight OPTIONS
     http_ctx = event.get("requestContext", {}).get("http", {})
     method = http_ctx.get("method", event.get("httpMethod", "GET")).upper()
     path = http_ctx.get("path", event.get("rawPath", event.get("path", "/")))
@@ -78,18 +55,9 @@ def lambda_handler(event, context):
     elif path.startswith("/receipts"):
         return generate_receipt_thumbnail_handler(event, context)
 
-    # Fallback default: return summary
     return get_monthly_summary_handler(event, context)
 
-
-# ----------------------------------------------------------------------
-# 1. Lambda: getTransactions
-# HTTP Method: GET /transactions
-# ----------------------------------------------------------------------
 def get_transactions_handler(event, context):
-    """
-    Retrieves transactions from DynamoDB with optional filtering by month, category, and type.
-    """
     logger.info("Executing getTransactions handler. Event: %s", json.dumps(event))
     try:
         query_params = event.get("queryStringParameters") or {}
@@ -97,7 +65,6 @@ def get_transactions_handler(event, context):
         category = query_params.get("category")
         tx_type = query_params.get("type")
 
-        # Scan DynamoDB table (or query GSI in larger setups)
         scan_kwargs = {}
         filter_expressions = []
 
@@ -117,7 +84,6 @@ def get_transactions_handler(event, context):
         response = table.scan(**scan_kwargs)
         items = response.get("Items", [])
 
-        # Sort newest first
         items.sort(key=lambda x: x.get("date", ""), reverse=True)
 
         logger.info("Retrieved %d transactions from DynamoDB", len(items))
@@ -131,14 +97,7 @@ def get_transactions_handler(event, context):
         logger.error("Error in getTransactions: %s", str(e), exc_info=True)
         return create_response(500, {"success": False, "message": str(e)})
 
-# ----------------------------------------------------------------------
-# 2. Lambda: addTransaction
-# HTTP Method: POST /transactions
-# ----------------------------------------------------------------------
 def add_transaction_handler(event, context):
-    """
-    Validates payload and inserts a new transaction item into DynamoDB.
-    """
     logger.info("Executing addTransaction handler.")
     try:
         body_raw = event.get("body")
@@ -147,7 +106,6 @@ def add_transaction_handler(event, context):
 
         payload = json.loads(body_raw)
 
-        # Validation
         title = payload.get("title", "").strip()
         amount_raw = payload.get("amount")
         tx_type = payload.get("type", "Expense")
@@ -169,7 +127,6 @@ def add_transaction_handler(event, context):
         if not date:
             date = datetime.utcnow().strftime("%Y-%m-%d")
 
-        # Generate unique transaction id
         item_id = f"tx-{int(datetime.utcnow().timestamp() * 1000)}"
 
         item = {
@@ -184,7 +141,6 @@ def add_transaction_handler(event, context):
             "createdAt": datetime.utcnow().isoformat() + "Z",
         }
 
-        # Put item into DynamoDB
         table.put_item(Item=item)
         logger.info("Successfully added transaction %s to DynamoDB", item_id)
 
@@ -194,14 +150,7 @@ def add_transaction_handler(event, context):
         logger.error("Error in addTransaction: %s", str(e), exc_info=True)
         return create_response(500, {"success": False, "message": str(e)})
 
-# ----------------------------------------------------------------------
-# 3. Lambda: deleteTransaction
-# HTTP Method: DELETE /transactions
-# ----------------------------------------------------------------------
 def delete_transaction_handler(event, context):
-    """
-    Deletes a transaction item from DynamoDB by id.
-    """
     logger.info("Executing deleteTransaction handler.")
     try:
         query_params = event.get("queryStringParameters") or {}
@@ -219,14 +168,7 @@ def delete_transaction_handler(event, context):
         logger.error("Error in deleteTransaction: %s", str(e), exc_info=True)
         return create_response(500, {"success": False, "message": str(e)})
 
-# ----------------------------------------------------------------------
-# 4. Lambda: getMonthlySummary
-# HTTP Method: GET /summary
-# ----------------------------------------------------------------------
 def get_monthly_summary_handler(event, context):
-    """
-    Computes aggregated monthly summary: income, expenses, balance, savings rate, and category breakdown.
-    """
     logger.info("Executing getMonthlySummary handler.")
     try:
         query_params = event.get("queryStringParameters") or {}
@@ -261,7 +203,6 @@ def get_monthly_summary_handler(event, context):
             if savings_rate < 0:
                 savings_rate = 0
 
-        # Format category list
         cat_list = []
         for cat_name, amt in category_breakdown.items():
             pct = 0
@@ -292,37 +233,23 @@ def get_monthly_summary_handler(event, context):
         logger.error("Error in getMonthlySummary: %s", str(e), exc_info=True)
         return create_response(500, {"success": False, "message": str(e)})
 
-# ----------------------------------------------------------------------
-# 5. Lambda: generateReceiptThumbnail
-# Trigger: S3 ObjectCreated Event OR HTTP POST /receipts/thumbnail
-# Demonstrates S3 Event-Driven Serverless Image Thumbnail Processing
-# ----------------------------------------------------------------------
 def generate_receipt_thumbnail_handler(event, context):
-    """
-    Event-driven handler for image uploads.
-    Triggered when a user uploads an expense receipt/invoice image.
-    Generates a compressed thumbnail and stores it in the 'thumbnails/' folder.
-    """
     logger.info("Executing generateReceiptThumbnail handler.")
     try:
-        # Check if triggered by S3 bucket notification event
         if "Records" in event and event["Records"][0].get("eventSource") == "aws:s3":
             s3_client = boto3.client("s3")
             for record in event["Records"]:
                 bucket_name = record["s3"]["bucket"]["name"]
                 object_key = record["s3"]["object"]["key"]
 
-                # Prevent recursive triggers on already generated thumbnails
                 if object_key.startswith("thumbnails/"):
                     continue
 
                 logger.info(f"Processing image {object_key} from bucket {bucket_name}")
-                # Download object from S3
                 download_path = f"/tmp/{os.path.basename(object_key)}"
                 upload_path = f"/tmp/thumb-{os.path.basename(object_key)}"
                 s3_client.download_file(bucket_name, object_key, download_path)
 
-                # Thumbnail generation via PIL (Pillow Lambda Layer)
                 try:
                     from PIL import Image
                     with Image.open(download_path) as image:
@@ -337,11 +264,10 @@ def generate_receipt_thumbnail_handler(event, context):
 
             return create_response(200, {"success": True, "message": "Thumbnail generated successfully"})
 
-        # Alternatively handles direct API Gateway payload with base64 image
         body_raw = event.get("body")
         if body_raw:
             payload = json.loads(body_raw)
-            image_data = payload.get("imageData") # base64 or URL
+            image_data = payload.get("imageData")
             return create_response(200, {
                 "success": True,
                 "thumbnailUrl": image_data or "https://images.unsplash.com/photo-1554415707-9e49017a1430?w=150&h=150&fit=crop",
@@ -353,5 +279,3 @@ def generate_receipt_thumbnail_handler(event, context):
     except Exception as e:
         logger.error("Error in generateReceiptThumbnail: %s", str(e), exc_info=True)
         return create_response(500, {"success": False, "message": str(e)})
-
-
