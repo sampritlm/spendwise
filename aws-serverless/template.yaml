@@ -1,0 +1,126 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  SpendWise — Smart Expense Tracker
+  AWS Serverless (FaaS) Infrastructure Template using Amazon Lambda (Python 3.12),
+  Amazon API Gateway (HTTP API), and Amazon DynamoDB.
+
+Globals:
+  Function:
+    Timeout: 10
+    MemorySize: 256
+    Runtime: python3.12
+    Environment:
+      Variables:
+        DYNAMODB_TABLE: !Ref SpendWiseTable
+
+Resources:
+  # ------------------------------------------------------------
+  # 1. DynamoDB Table
+  # ------------------------------------------------------------
+  SpendWiseTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: SpendWiseTransactions
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+
+  # ------------------------------------------------------------
+  # 2. HTTP API Gateway with CORS enabled
+  # ------------------------------------------------------------
+  SpendWiseApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins:
+          - '*'
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+        AllowMethods:
+          - GET
+          - POST
+          - DELETE
+          - OPTIONS
+        MaxAge: 600
+
+  # ------------------------------------------------------------
+  # 3. Lambda Functions
+  # ------------------------------------------------------------
+  GetTransactionsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./
+      Handler: lambda_handlers.get_transactions_handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SpendWiseTable
+      Events:
+        GetTx:
+          Type: HttpApi
+          Properties:
+            Path: /transactions
+            Method: GET
+            ApiId: !Ref SpendWiseApi
+
+  AddTransactionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./
+      Handler: lambda_handlers.add_transaction_handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SpendWiseTable
+      Events:
+        AddTx:
+          Type: HttpApi
+          Properties:
+            Path: /transactions
+            Method: POST
+            ApiId: !Ref SpendWiseApi
+
+  DeleteTransactionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./
+      Handler: lambda_handlers.delete_transaction_handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SpendWiseTable
+      Events:
+        DeleteTx:
+          Type: HttpApi
+          Properties:
+            Path: /transactions
+            Method: DELETE
+            ApiId: !Ref SpendWiseApi
+
+  GetMonthlySummaryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./
+      Handler: lambda_handlers.get_monthly_summary_handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SpendWiseTable
+      Events:
+        GetSummary:
+          Type: HttpApi
+          Properties:
+            Path: /summary
+            Method: GET
+            ApiId: !Ref SpendWiseApi
+
+Outputs:
+  HttpApiUrl:
+    Description: "HTTP API Gateway endpoint URL (Set as VITE_API_BASE_URL in SpendWise frontend)"
+    Value: !Sub "https://${SpendWiseApi}.execute-api.${AWS::Region}.amazonaws.com"
+  DynamoDbTableName:
+    Description: "DynamoDB Table Name"
+    Value: !Ref SpendWiseTable
+
