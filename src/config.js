@@ -19,6 +19,9 @@ export const config = {
     : (import.meta.env.VITE_USE_MOCK_API !== 'false' || !import.meta.env.VITE_API_BASE_URL),
     
   awsRegion: import.meta.env.VITE_AWS_REGION || 'ap-south-1',
+
+  // Razorpay Gateway Integration
+  razorpayKeyId: import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_live_TxKEnjiiKSTa2q',
   
   // Currency defaults
   defaultCurrency: 'INR',

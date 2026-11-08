@@ -149,6 +149,7 @@ export const CATEGORY_CONFIG = {
 };
 
 export const PAYMENT_METHODS = [
+  'Razorpay Online',
   'UPI / GPay / PhonePe',
   'Credit Card',
   'Debit Card',

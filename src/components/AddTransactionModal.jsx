@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { X, ArrowDownRight, ArrowUpRight, CheckCircle2, AlertCircle, Upload, Image as ImageIcon } from 'lucide-react';
+import { X, ArrowDownRight, ArrowUpRight, CheckCircle2, AlertCircle, Upload, Image as ImageIcon, CreditCard } from 'lucide-react';
 import { CATEGORIES_LIST, PAYMENT_METHODS, CATEGORY_CONFIG } from '../utils/formatters';
 import { useTransactions } from '../context/TransactionContext';
+import { razorpayService } from '../services/razorpayService';
 
 export const AddTransactionModal = ({ isOpen, onClose }) => {
   const { addTransaction, currency } = useTransactions();
@@ -99,6 +100,54 @@ export const AddTransactionModal = ({ isOpen, onClose }) => {
       setErrors({});
       onClose();
     }
+  };
+
+  const handleRazorpayPayment = async () => {
+    if (!validate()) return;
+
+    setSubmitting(true);
+    await razorpayService.openCheckout({
+      amount: parseFloat(formData.amount),
+      title: formData.title,
+      description: formData.description || `${formData.category} payment via SpendWise`,
+      onSuccess: async (rzpRes) => {
+        const paymentDesc = formData.description 
+          ? `${formData.description} [Razorpay ID: ${rzpRes.paymentId}]` 
+          : `Paid via Razorpay [ID: ${rzpRes.paymentId}]`;
+
+        const result = await addTransaction({
+          title: formData.title,
+          amount: parseFloat(formData.amount),
+          type: formData.type,
+          category: formData.category,
+          date: formData.date,
+          paymentMethod: 'Razorpay Online',
+          description: paymentDesc,
+          receiptUrl: formData.receiptUrl,
+        });
+
+        setSubmitting(false);
+        if (result && result.success) {
+          setFormData({
+            title: '',
+            amount: '',
+            type: 'Expense',
+            category: 'Food',
+            date: today,
+            paymentMethod: 'UPI / GPay / PhonePe',
+            description: '',
+            receiptUrl: '',
+          });
+          setImagePreview(null);
+          setErrors({});
+          onClose();
+        }
+      },
+      onFailure: (err) => {
+        setSubmitting(false);
+        console.warn('Razorpay error or dismissal:', err);
+      },
+    });
   };
 
   // Switch category automatically to appropriate default when changing type
@@ -353,24 +402,38 @@ export const AddTransactionModal = ({ isOpen, onClose }) => {
           </div>
 
           {/* Actions */}
-          <div className="pt-2 flex items-center justify-end gap-3 border-t border-slate-100">
+          <div className="pt-2 flex flex-wrap items-center justify-end gap-2.5 border-t border-slate-100">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 text-sm font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors"
+              className="px-3.5 py-2.5 text-xs sm:text-sm font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors mr-auto"
             >
               Cancel
             </button>
+
+            {formData.type === 'Expense' && (
+              <button
+                type="button"
+                onClick={handleRazorpayPayment}
+                disabled={submitting}
+                className="px-3.5 sm:px-4 py-2.5 rounded-xl font-semibold text-xs sm:text-sm bg-gradient-to-r from-sky-700 to-indigo-700 hover:from-sky-800 hover:to-indigo-800 text-white shadow-sm transition-all flex items-center gap-1.5 disabled:opacity-60"
+                title="Pay now using Razorpay UPI, Cards, or NetBanking"
+              >
+                <CreditCard className="w-4 h-4 text-sky-200" />
+                <span>Pay via Razorpay</span>
+              </button>
+            )}
+
             <button
               type="submit"
               disabled={submitting}
-              className={`px-5 py-2.5 rounded-xl font-semibold text-sm text-white shadow-sm transition-all flex items-center gap-2 ${
+              className={`px-4 sm:px-5 py-2.5 rounded-xl font-semibold text-xs sm:text-sm text-white shadow-sm transition-all flex items-center gap-2 ${
                 formData.type === 'Income'
                   ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/25'
                   : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-600/25'
               } disabled:opacity-60`}
             >
-              {submitting ? 'Saving...' : 'Save Transaction'}
+              {submitting ? 'Saving...' : 'Save Record'}
             </button>
           </div>
         </form>

@@ -14,10 +14,13 @@ import {
   RefreshCw,
   Save,
   ExternalLink,
-  ShieldAlert
+  ShieldAlert,
+  CreditCard,
+  Lock
 } from 'lucide-react';
 import { useTransactions } from '../context/TransactionContext';
 import { config, updateRuntimeConfig } from '../config';
+import { razorpayService } from '../services/razorpayService';
 
 export const Settings = () => {
   const { currency, setCurrency, resetToSampleData, showToast } = useTransactions();
@@ -83,6 +86,25 @@ export const Settings = () => {
       );
     } finally {
       setAwsTesting(false);
+    }
+  };
+
+  const handleTestRazorpay = async () => {
+    try {
+      showToast('info', 'Opening Razorpay', `Launching checkout with Key: ${config.razorpayKeyId.substring(0, 12)}...`);
+      await razorpayService.openCheckout({
+        amount: 1,
+        title: 'SpendWise Verification',
+        description: 'Gateway Connectivity Test (₹1)',
+        onSuccess: (res) => {
+          showToast('success', 'Razorpay Success', `Payment verified! ID: ${res.paymentId}`);
+        },
+        onFailure: (err) => {
+          showToast('info', 'Razorpay Dismissed', err.message || 'Modal closed');
+        },
+      });
+    } catch (err) {
+      showToast('error', 'Razorpay Error', err.message || 'Could not launch checkout');
     }
   };
 
@@ -256,6 +278,68 @@ export const Settings = () => {
               </label>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Razorpay Payment Gateway Integration */}
+      <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-soft">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 mb-5 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-sky-50 text-sky-700 flex items-center justify-center border border-sky-100">
+              <CreditCard className="w-5 h-5 text-sky-600" />
+            </div>
+            <div>
+              <h3 className="font-bold text-slate-900 text-base">Razorpay Payment Gateway</h3>
+              <p className="text-xs text-slate-500">Live payment processor for bills, expenses, and instant checkout</p>
+            </div>
+          </div>
+
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 self-start sm:self-auto">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            Live Gateway Active
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
+          <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/70">
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">
+              Razorpay Key ID
+            </span>
+            <div className="flex items-center gap-2">
+              <Lock className="w-3.5 h-3.5 text-slate-400" />
+              <code className="text-xs font-mono font-bold text-slate-800 break-all">
+                {config.razorpayKeyId}
+              </code>
+            </div>
+          </div>
+
+          <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/70">
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">
+              Supported Payment Methods
+            </span>
+            <div className="flex flex-wrap gap-1.5 mt-1">
+              {['UPI (GPay/PhonePe)', 'Credit & Debit Cards', 'NetBanking', 'QR Code'].map((m) => (
+                <span key={m} className="px-2 py-0.5 rounded text-[11px] font-medium bg-white text-slate-700 border border-slate-200">
+                  {m}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-3 border-t border-slate-100">
+          <p className="text-xs text-slate-500 max-w-md">
+            Clicking the test button will trigger Razorpay's official checkout modal on your screen using your live key ID.
+          </p>
+
+          <button
+            type="button"
+            onClick={handleTestRazorpay}
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-sky-700 to-indigo-700 hover:from-sky-800 hover:to-indigo-800 text-white rounded-xl text-xs font-bold shadow-sm transition-all"
+          >
+            <CreditCard className="w-3.5 h-3.5 text-sky-200" />
+            <span>Test ₹1 Razorpay Checkout</span>
+          </button>
         </div>
       </div>
 
